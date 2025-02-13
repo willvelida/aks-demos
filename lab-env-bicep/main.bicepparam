@@ -1,0 +1,10 @@
+using 'main.bicep'
+
+param logAnalyticsName = 'law-wv-prod-001'
+param prometheusName = 'prom-wv-prod-001'
+param grafanaName = 'graf-wv-prod-001'
+param keyVaultName = 'kv-wv-prod-001'
+param managedIdentityName = 'uai-wv-prod-001'
+param acrName = 'acrwvprod001'
+param aksName = 'aks-wv-prod-001'
+param userObjectId = ''
