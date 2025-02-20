@@ -1,32 +1,32 @@
-@description('The region where all resources will be deployed. Default is the location of the resource group')
+@description('The location where we will deploy our resources.')
 param location string = resourceGroup().location
 
-@description('The user object id for the cluster admin')
-@secure()
-param userObjectId string
-
-@description('The name given to the Log Analytics workspace')
+@description('The name given to the log analytics workspace')
 param logAnalyticsName string
 
 @description('The name given to the Azure Managed Prometheus workspace')
 param prometheusName string
 
-@description('The name given to the Grafana Dashboard')
+@description('The name given to the Grafana resource')
 param grafanaName string
+
+@description('The name for the aks cluster')
+param aksName string
+
+@description('The user object Id')
+@secure()
+param userObjectId string
+
+@description('The name given to the User-Assigned managed identity')
+param uaiIdentityName string
 
 @description('The name given to the Key Vault')
 param keyVaultName string
 
-@description('The name given to the User-Assigned Managed Identity')
-param managedIdentityName string
-
 @description('The name given to the Azure Container Registry')
 param acrName string
 
-@description('The name given to the AKS Cluster')
-param aksName string
-
-@description('The tags applied to all resources')
+@description('The tags applied to all resources in this template')
 param tags object = {
   ApplicationName: 'lab-env-bicep'
 }
@@ -45,11 +45,12 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   }
 }
 
-resource prometheusWorkspace 'Microsoft.Monitor/accounts@2023-04-03' = {
+resource prometheus 'Microsoft.Monitor/accounts@2023-04-03' = {
   name: prometheusName
   location: location
   tags: tags
 }
+
 
 resource grafanaDashboard 'Microsoft.Dashboard/grafana@2023-09-01' = {
   name: grafanaName
@@ -64,12 +65,18 @@ resource grafanaDashboard 'Microsoft.Dashboard/grafana@2023-09-01' = {
   properties: {
     grafanaIntegrations: {
       azureMonitorWorkspaceIntegrations: [
-        {
-          azureMonitorWorkspaceResourceId: prometheusWorkspace.id
+        { 
+          azureMonitorWorkspaceResourceId: prometheus.id
         }
       ]
     }
   }
+}
+
+resource uai 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: uaiIdentityName
+  location: location
+  tags: tags
 }
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
@@ -81,14 +88,9 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
       name: 'standard'
       family: 'A'
     }
-    tenantId: subscription().tenantId
+    tenantId: tenant().tenantId
     enableRbacAuthorization: true
   }
-}
-
-resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: managedIdentityName
-  location: location
 }
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -153,7 +155,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
     }
     enableRBAC: true
     addonProfiles: {
-      azureKeyvaultSecretsProvider: {
+      azureKeyVaultSecretsProvider: {
         enabled: true
       }
       omsAgent: {
@@ -170,10 +172,20 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
           metricAnnotationsAllowList: '*'
           metricLabelsAllowlist: '*'
         }
-      }     
+      }
     }
   }
+
+
 }
+
+
+
+
+
+
+
+
 
 // ROLE ASSIGNMENTS
 resource grafanaAdminRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -187,20 +199,20 @@ resource grafanaAdminRole 'Microsoft.Authorization/roleAssignments@2022-04-01' =
 }
 
 resource keyVaultSecretUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, resourceGroup().id, managedIdentity.id, 'Key Vault Secrets User')
+  name: guid(subscription().id, resourceGroup().id, uai.id, 'Key Vault Secrets User')
   scope: keyVault
   properties: {
-    principalId: managedIdentity.properties.principalId
+    principalId: uai.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: resourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
   }
 }
 
 resource keyVaultCertificateUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().id, resourceGroup().id, managedIdentity.id, 'Key Vault Certificate User')
+  name: guid(subscription().id, resourceGroup().id, uai.id, 'Key Vault Certificate User')
   scope: keyVault
   properties: {
-    principalId: managedIdentity.properties.principalId
+    principalId: uai.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: resourceId('Microsoft.Authorization/roleDefinitions', 'db79e9a7-68ee-4b58-9aeb-b90e7c24fcba')
   }
